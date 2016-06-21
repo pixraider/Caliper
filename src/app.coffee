@@ -53,9 +53,17 @@ symbDb = new SymbolDatabase
 webhook = new WebHook(symbDb)
 
 startServer = () ->
-  port = process.env.MINI_BREAKPAD_SERVER_PORT || process.env.PORT || 80
-  app.listen port
-  console.log "Listening on port #{port}"
+  port = process.env.OPENSHIFT_NODEJS_PORT || 80
+  host = process.env.OPENSHIFT_NODEJS_IP || '127.0.0.1'
+  #port = process.env.MINI_BREAKPAD_SERVER_PORT || process.env.PORT || 80
+
+  if host == null
+    app.listen port
+    console.log "Listening on port #{port}"
+  else
+    app.listen port, host
+    console.log "Listening on hostname #{host}, port #{port}"
+
   console.log "Using random admin password: #{secret_admin_password}" if secret_admin_password != process.env.MINI_BREAKPAD_ADMIN_PASSWORD
   console.log "Using random api_key: #{api_key}" if api_key != process.env.MINI_BREAKPAD_API_KEY
   console.log "Using provided github server token" if process.env.MINI_BREAKPAD_SERVER_TOKEN
@@ -115,17 +123,22 @@ app.get "/#{root}fetch", (req, res, next) ->
   res.end()
 
 app.post "/#{root}crash_upload", (req, res, next) ->
+  console.log "Crash upload request received."
   saver.saveRequest req, db, (err, filename) ->
     return next err if err?
 
-    console.log 'saved', filename
+    console.log 'Crash saved', filename
     res.send path.basename(filename)
     res.end()
 
 app.post "/#{root}symbol_upload", (req, res, next) ->
-  return symbols.saveSymbols req, (error, destination) ->
-    return next error if error?
-    console.log "Saved Symbols: #{destination}"
+  console.log "Symbol upload request received."
+  return symbols.saveSymbols req, (error, destination, fields) ->
+    if error?
+      console.log "Error saving symbol!"
+      console.log error
+      return next error
+    console.log "Symbols saved: #{destination}"
     return res.end()
 
 app.post "/#{root}login", passport.authenticate("local", successRedirect:"/#{root}", failureRedirect:"/#{root}login_page")
